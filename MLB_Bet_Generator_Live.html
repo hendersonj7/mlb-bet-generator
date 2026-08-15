@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MLB Bet Generator Live</title>
+<style>
+:root{--bg:#071018;--panel:#0f1924;--panel2:#132131;--text:#f3f7fb;--muted:#8fa2b5;--green:#3ddc84;--yellow:#ffd166;--red:#ff6b6b;--blue:#5aa9ff;--line:#24374a}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#071019,#0a1119 45%,#071018);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.wrap{max-width:1280px;margin:auto;padding:20px}h1{margin:0;font-size:34px}.sub{color:var(--muted);margin:7px 0 0;max-width:900px;line-height:1.45}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-top:16px}.row{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.field{flex:1;min-width:180px}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #2b4055;background:#09131e;color:var(--text)}
+button{padding:11px 15px;border:0;border-radius:10px;font-weight:900;cursor:pointer}.primary{background:var(--green);color:#06130b}.blue{background:var(--blue);color:#07101a}.secondary{background:#1d2b3a;color:var(--text);border:1px solid #31485e}
+.status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:900;background:#15263a;color:#9ac9ff}.ok{background:#0d2c1f;color:var(--green)}.warn{background:#332c13;color:var(--yellow)}.bad{background:#35191d;color:var(--red)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}.metric{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}.k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}.v{font-size:25px;font-weight:900;margin-top:6px}
+table{width:100%;border-collapse:collapse;margin-top:12px}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}th{color:var(--muted);font-size:11px;text-transform:uppercase;background:var(--panel2)}.good{color:var(--green);font-weight:900}.watch{color:var(--yellow);font-weight:900}.pass{color:var(--muted)}.small{font-size:12px;color:var(--muted);line-height:1.5}
+.pick{display:grid;grid-template-columns:48px 1fr auto;gap:12px;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)}.pick:last-child{border-bottom:0}
+.big{font-size:22px;font-weight:900}.right{text-align:right}.hidden{display:none}.notice{padding:12px;border:1px solid #3b4d61;border-radius:12px;background:#101d2a;margin-top:12px}
+a{color:#8cc5ff}@media(max-width:850px){.grid{grid-template-columns:1fr 1fr}.hide-mobile{display:none}}@media(max-width:520px){.grid{grid-template-columns:1fr}.wrap{padding:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⚾ MLB Bet Generator — Live</h1>
+  <div class="sub">Load the MLB slate, pull current US moneylines, compare the best available price with a starter-based model, and rank value bets. This is a screening tool, not a guarantee.</div>
+
+  <div class="card">
+    <div class="row">
+      <div class="field"><label>Date</label><input id="date" type="date"></div>
+      <div class="field" style="flex:2"><label>The Odds API key</label><input id="apiKey" type="password" placeholder="Paste your API key here"></div>
+      <div><button class="secondary" onclick="saveKey()">Save Key</button></div>
+      <div><button class="blue" onclick="loadSlate()">1. Load MLB Slate</button></div>
+      <div><button class="blue" onclick="loadOdds()">2. Load Live Odds</button></div>
+      <div><button class="primary" onclick="generate()">3. GENERATE BETS</button></div>
+    </div>
+    <div class="notice small">
+      <b>First time only:</b> get a free API key from <a href="https://the-odds-api.com/" target="_blank" rel="noopener">The Odds API</a>, paste it above, and press <b>Save Key</b>. After that, the key stays in this browser's local storage. The MLB schedule/probable-pitcher feed does not need your odds key.
+    </div>
+    <div style="margin-top:12px"><span id="status" class="status">READY</span> <span id="msg" class="small">Choose a date and load the slate.</span></div>
+  </div>
+
+  <div class="grid">
+    <div class="metric"><div class="k">Games Loaded</div><div id="gamesLoaded" class="v">0</div></div>
+    <div class="metric"><div class="k">Games With Odds</div><div id="oddsLoaded" class="v">0</div></div>
+    <div class="metric"><div class="k">Best Value</div><div id="bestValue" class="v">—</div></div>
+    <div class="metric"><div class="k">Best Underdog</div><div id="bestDog" class="v">—</div></div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin:0">Generated Bets</h2>
+    <div id="picks" class="small" style="margin-top:10px">Nothing generated yet.</div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin:0">Loaded Slate</h2>
+    <div style="overflow:auto">
+      <table>
+        <thead><tr><th>Game</th><th>Probable Pitchers</th><th>Best Away ML</th><th>Best Home ML</th><th class="hide-mobile">Model Notes</th></tr></thead>
+        <tbody id="slate"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin:0 0 8px">How the generator is scoring</h2>
+    <div class="small">
+      The current automatic model starts with the market's vig-adjusted probability, then adjusts for the difference between the two probable starters' season ERAs. It caps the pitching adjustment so one statistic cannot dominate. It then searches for a price/model gap. This is intentionally more conservative than pretending we have lineup and bullpen information when we do not. Once confirmed lineups are available, those should be checked before placing a bet.
+    </div>
+  </div>
+</div>
+
+<script>
+let games=[], oddsGames=[];
+
+function setStatus(text,cls,msg){
+  const s=document.getElementById('status'); s.textContent=text; s.className='status '+(cls||'');
+  document.getElementById('msg').textContent=msg||'';
+}
+function tomorrowISO(){
+  const d=new Date(); d.setDate(d.getDate()+1);
+  return d.toISOString().slice(0,10);
+}
+document.getElementById('date').value=tomorrowISO();
+document.getElementById('apiKey').value=localStorage.getItem('oddsApiKey')||'';
+
+function saveKey(){
+  const k=document.getElementById('apiKey').value.trim();
+  if(!k){setStatus('KEY NEEDED','warn','Paste your Odds API key first.');return}
+  localStorage.setItem('oddsApiKey',k);
+  setStatus('KEY SAVED','ok','Odds key saved on this device/browser.');
+}
+function americanFromDecimal(d){
+  if(!d || d<=1) return null;
+  return d>=2 ? Math.round((d-1)*100) : Math.round(-100/(d-1));
+}
+function impliedAmerican(a){
+  a=Number(a); if(!a) return null;
+  return a<0 ? (-a)/((-a)+100) : 100/(a+100);
+}
+function bestAmerican(values){
+  if(!values.length) return null;
+  // Higher American odds always represent the better payout (+150 better than +130; -110 better than -130).
+  return Math.max(...values);
+}
+function normalizeName(s){
+  return (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+}
+async function fetchPitcherERA(id){
+  if(!id) return null;
+  try{
+    const season=new Date(document.getElementById('date').value+'T12:00:00').getFullYear();
+    const u=`https://statsapi.mlb.com/api/v1/people/${id}/stats?stats=season&group=pitching&season=${season}`;
+    const r=await fetch(u); if(!r.ok) return null;
+    const j=await r.json();
+    const split=j?.stats?.[0]?.splits?.[0];
+    const era=Number(split?.stat?.era);
+    return Number.isFinite(era)?era:null;
+  }catch(e){return null}
+}
+async function loadSlate(){
+  const date=document.getElementById('date').value;
+  if(!date){setStatus('DATE NEEDED','warn','Choose a date.');return}
+  setStatus('LOADING','warn','Loading MLB schedule and probable pitchers…');
+  try{
+    const url=`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=probablePitcher`;
+    const r=await fetch(url); if(!r.ok) throw new Error('MLB feed returned '+r.status);
+    const j=await r.json();
+    const raw=(j.dates||[]).flatMap(d=>d.games||[]);
+    games=raw.map(g=>({
+      id:g.gamePk,
+      away:g.teams.away.team.name,
+      home:g.teams.home.team.name,
+      awayPitcher:g.teams.away.probablePitcher||null,
+      homePitcher:g.teams.home.probablePitcher||null,
+      awayERA:null,homeERA:null,
+      awayML:null,homeML:null
+    }));
+    renderSlate();
+    document.getElementById('gamesLoaded').textContent=games.length;
+    setStatus('SLATE LOADED','ok',`${games.length} MLB games loaded. Pulling starter stats…`);
+    await Promise.all(games.map(async g=>{
+      [g.awayERA,g.homeERA]=await Promise.all([
+        fetchPitcherERA(g.awayPitcher?.id),
+        fetchPitcherERA(g.homePitcher?.id)
+      ]);
+    }));
+    renderSlate();
+    setStatus('STARTERS READY','ok',`${games.length} games loaded with available probable-pitcher stats.`);
+  }catch(e){
+    console.error(e);
+    setStatus('MLB ERROR','bad','Could not load the MLB feed in this browser. '+e.message);
+  }
+}
+async function loadOdds(){
+  const key=(document.getElementById('apiKey').value.trim()||localStorage.getItem('oddsApiKey')||'');
+  if(!key){setStatus('KEY NEEDED','warn','Paste and save your Odds API key first.');return}
+  setStatus('LOADING ODDS','warn','Pulling current US MLB moneylines…');
+  try{
+    const url=`https://api.the-odds-api.com/v4/sports/baseball_mlb/odds/?apiKey=${encodeURIComponent(key)}&regions=us&markets=h2h&oddsFormat=american`;
+    const r=await fetch(url);
+    if(!r.ok){
+      const t=await r.text();
+      throw new Error(`Odds feed returned ${r.status}. ${t.slice(0,140)}`);
+    }
+    oddsGames=await r.json();
+    matchOdds();
+    const n=games.filter(g=>g.awayML!==null||g.homeML!==null).length;
+    document.getElementById('oddsLoaded').textContent=n;
+    renderSlate();
+    setStatus('ODDS LOADED','ok',`${n} slate games matched to current moneylines.`);
+  }catch(e){
+    console.error(e);
+    setStatus('ODDS ERROR','bad',e.message);
+  }
+}
+function matchOdds(){
+  games.forEach(g=>{
+    const og=oddsGames.find(o=>
+      normalizeName(o.home_team)===normalizeName(g.home) &&
+      normalizeName(o.away_team)===normalizeName(g.away)
+    );
+    g.awayML=null;g.homeML=null;
+    if(!og) return;
+    const away=[],home=[];
+    (og.bookmakers||[]).forEach(b=>{
+      const m=(b.markets||[]).find(x=>x.key==='h2h');
+      (m?.outcomes||[]).forEach(o=>{
+        if(normalizeName(o.name)===normalizeName(g.away)) away.push(Number(o.price));
+        if(normalizeName(o.name)===normalizeName(g.home)) home.push(Number(o.price));
+      });
+    });
+    g.awayML=bestAmerican(away);
+    g.homeML=bestAmerican(home);
+  });
+}
+function renderSlate(){
+  const tb=document.getElementById('slate');tb.innerHTML='';
+  games.forEach(g=>{
+    const ap=g.awayPitcher?.fullName||'TBD', hp=g.homePitcher?.fullName||'TBD';
+    const eraText=`${ap}${g.awayERA!==null?' ('+g.awayERA.toFixed(2)+' ERA)':''} vs ${hp}${g.homeERA!==null?' ('+g.homeERA.toFixed(2)+' ERA)':''}`;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td><b>${g.away}</b> @ <b>${g.home}</b></td>
+      <td>${eraText}</td>
+      <td>${g.awayML!==null?(g.awayML>0?'+':'')+g.awayML:'—'}</td>
+      <td>${g.homeML!==null?(g.homeML>0?'+':'')+g.homeML:'—'}</td>
+      <td class="hide-mobile">${(g.awayERA!==null&&g.homeERA!==null)?'Starter comparison available':'Starter data incomplete'}</td>`;
+    tb.appendChild(tr);
+  });
+}
+function modelForSide(g,side){
+  const ownML=side==='away'?g.awayML:g.homeML;
+  const oppML=side==='away'?g.homeML:g.awayML;
+  if(ownML===null||oppML===null) return null;
+  let pi=impliedAmerican(ownML), po=impliedAmerican(oppML);
+  if(pi===null||po===null) return null;
+  // Remove two-way vig.
+  const base=pi/(pi+po);
+  let adj=0;
+  if(g.awayERA!==null && g.homeERA!==null){
+    // Lower starter ERA gets a modest model boost, capped ±7 percentage points.
+    const ownERA=side==='away'?g.awayERA:g.homeERA;
+    const oppERA=side==='away'?g.homeERA:g.awayERA;
+    adj=Math.max(-0.07,Math.min(0.07,(oppERA-ownERA)*0.0225));
+  }
+  const model=Math.max(0.05,Math.min(0.95,base+adj));
+  return {base,model,edge:model-pi,adj};
+}
+function generate(){
+  if(!games.length){setStatus('LOAD SLATE','warn','Press Load MLB Slate first.');return}
+  const candidates=[];
+  games.forEach(g=>{
+    ['away','home'].forEach(side=>{
+      const m=modelForSide(g,side); if(!m) return;
+      const ml=side==='away'?g.awayML:g.homeML;
+      const team=side==='away'?g.away:g.home;
+      const pitcher=side==='away'?g.awayPitcher?.fullName:g.homePitcher?.fullName;
+      const era=side==='away'?g.awayERA:g.homeERA;
+      const oppEra=side==='away'?g.homeERA:g.awayERA;
+      // Conservative confidence score: edge + completeness.
+      const edgePct=m.edge*100;
+      let score=62 + Math.max(-12,Math.min(24,edgePct*4));
+      if(era!==null&&oppEra!==null) score+=6;
+      score=Math.max(0,Math.min(100,score));
+      if(m.edge>=0.015 && score>=70){
+        candidates.push({team,ml,edge:m.edge,model:m.model,score,pitcher,era,oppEra,game:`${g.away} @ ${g.home}`});
+      }
+    });
+  });
+  candidates.sort((a,b)=>b.score-a.score||b.edge-a.edge);
+  const top=candidates.slice(0,3);
+  const out=document.getElementById('picks');
+  if(!top.length){
+    out.innerHTML=`<div class="big pass">PASS THE SLATE</div><div class="small">No current moneyline clears the generator's minimum edge. That is a valid result.</div>`;
+    document.getElementById('bestValue').textContent='PASS';
+    document.getElementById('bestDog').textContent='—';
+    setStatus('NO BET','warn','No qualifying value bet was found.');
+    return;
+  }
+  out.innerHTML=top.map((x,i)=>`
+    <div class="pick">
+      <div class="big">#${i+1}</div>
+      <div><div class="big">${x.team} ML ${(x.ml>0?'+':'')+x.ml}</div>
+      <div class="small">${x.game} • Model ${(x.model*100).toFixed(1)}% • Raw implied ${(impliedAmerican(x.ml)*100).toFixed(1)}% • Edge +${(x.edge*100).toFixed(1)}%</div>
+      <div class="small">${x.pitcher||'Starter TBD'}${x.era!==null?' '+x.era.toFixed(2)+' ERA':''}${x.oppEra!==null?' vs opponent starter '+x.oppEra.toFixed(2)+' ERA':''}</div></div>
+      <div class="right"><div class="${x.score>=82?'good':'watch'} big">${x.score.toFixed(0)}/100</div><div class="small">${x.ml>0?'UNDERDOG':'VALUE'}</div></div>
+    </div>`).join('');
+  document.getElementById('bestValue').textContent=top[0].team;
+  const dog=candidates.find(x=>x.ml>0);
+  document.getElementById('bestDog').textContent=dog?dog.team:'—';
+  setStatus('BETS GENERATED','ok',`${top.length} qualifying plays generated. Recheck confirmed lineups before betting.`);
+}
+</script>
+</body>
+</html>
